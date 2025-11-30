@@ -1,0 +1,47 @@
+# Tests
+tests/
+*.test.ts
+*.spec.ts
+
+# Examples
+examples/
+
+# Development files
+.cursor/
+*.md
+!README.md
+
+# Build artifacts
+dist/
+out/
+*.tsbuildinfo
+
+# Rust binaries
+tests/rust-binaries/
+
+# Git
+.git/
+.gitignore
+
+# CI/CD
+.github/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.*
+
+# Coverage
+coverage/
+*.lcov
+
+# Lock files (let users manage their own)
+bun.lock
+

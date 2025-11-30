@@ -15,14 +15,17 @@
   },
   "files": [
     "src",
-    "index.ts"
+    "index.ts",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "test": "bun test tests/",
     "test:same-lang": "bun test tests/same-lang/",
     "test:cross-lang": "bun test tests/cross-lang/",
     "test:build-rust": "cd tests/rust-binaries && cargo build --release",
-    "typecheck": "bun x tsc --noEmit"
+    "typecheck": "bun x tsc --noEmit",
+    "prepublishOnly": "bun run typecheck && bun test tests/same-lang/"
   },
   "keywords": [
     "encryption",
@@ -32,10 +35,21 @@
     "secure",
     "stream",
     "networking",
-    "clavis"
+    "clavis",
+    "encrypted-communication",
+    "tls-alternative"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thewander02/clavis-js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/thewander02/clavis-js/issues"
+  },
+  "homepage": "https://github.com/thewander02/clavis-js#readme",
   "engines": {
+    "node": ">=18.0.0",
     "bun": ">=1.0.0"
   },
   "devDependencies": {
