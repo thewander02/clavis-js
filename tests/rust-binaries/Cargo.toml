@@ -1,0 +1,19 @@
+[package]
+name = "clavis-test-binaries"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "test-server"
+path = "test-server/src/main.rs"
+
+[[bin]]
+name = "test-client"
+path = "test-client/src/main.rs"
+
+[dependencies]
+clavis = { git = "https://github.com/pyrohost/clavis" }
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
