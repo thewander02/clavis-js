@@ -9,6 +9,7 @@ export * from "./handshake.js";
 export * from "./stream.js";
 export * from "./protocol.js";
 export * from "./bincode.js";
+export * from "./bincode-helpers.js";
 
 // Re-export main types for convenience
 export type { EncryptedStreamOptions } from "./stream.js";

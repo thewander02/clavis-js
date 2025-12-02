@@ -10,6 +10,7 @@ Secure encrypted communication over asynchronous streams - TypeScript implementa
 - 📦 **Packet-based Protocol** - Simple packet serialization/deserialization
 - 🌐 **Stream-based** - Works with Node.js streams (TCP, TLS, etc.)
 - ⚡ **TypeScript First** - Full TypeScript support with type safety
+- 🔄 **Bincode Compatible** - Matches Rust's bincode serialization format
 
 ## Installation
 
@@ -57,14 +58,74 @@ Define your packet types using the protocol DSL:
 ```typescript
 import { protocol } from "clavis-js";
 
-export const Packet = protocol({
-  Ping: ["PingPongData"],
-  Pong: ["PingPongData"],
+interface PingPongData {
+  message: string;
+}
+
+const Packet = protocol({
+  Ping: [{ message: String }],
+  Pong: [{ message: String }],
   Shutdown: [],
 });
+
+// Create a packet
+const ping = Packet.Ping({ message: "hello" });
+
+// Serialize (automatically uses VarintEncoding for variant indices)
+const serialized = ping.serialize();
 ```
 
-For full bincode-compatible serialization, see the [test protocol implementation](./tests/helpers/test-protocol.ts).
+## Bincode Serialization
+
+The library provides bincode-compatible serialization that matches Rust's `bincode` format with `serde`. This is especially important when communicating with Rust services.
+
+### Key Features
+
+- **VarintEncoding**: Enum variant indices use VarintEncoding (values < 251 are single byte)
+- **DateTime Support**: Serializes `Date` objects as `chrono::DateTime<Utc>` format (struct { secs: i64, nsecs: u32 })
+- **Option Types**: Supports Rust's `Option<T>` serialization (u8 discriminant + value)
+- **String Pairs**: Helper for `Vec<(String, String)>` (e.g., environment variables)
+
+### Example: Matching Rust Protocol
+
+```typescript
+import { 
+  serializeMessageHeader, 
+  serializeResourceSpec, 
+  writeVarintU32,
+  writeString,
+  writeU16 
+} from "clavis-js";
+
+// Serialize a message matching Rust's protocol! macro
+function serializeOrchestratorHello(buffer: number[], hello: {
+  header: { correlation_id: string; timestamp?: Date };
+  orchestrator_id: string;
+  protocol_version: string;
+  client_name: string;
+}): void {
+  // Write variant index (Varint-encoded)
+  writeVarintU32(buffer, 19); // OrchestratorHello variant index
+  
+  // Serialize header
+  serializeMessageHeader(buffer, hello.header);
+  
+  // Serialize fields in order
+  writeString(buffer, hello.orchestrator_id);
+  writeString(buffer, hello.protocol_version);
+  writeString(buffer, hello.client_name);
+}
+```
+
+### Available Helpers
+
+- `writeVarintU32()` - Varint-encoded u32 (for enum variant indices)
+- `writeString()` - String serialization (u64 length + UTF-8 bytes)
+- `writeOptionString()` - Option<String> serialization
+- `writeStringPairVec()` - Vec<(String, String)> serialization
+- `writeDateTime()` - DateTime<Utc> serialization (struct { secs: i64, nsecs: u32 })
+- `serializeMessageHeader()` - MessageHeader struct serialization
+- `serializeResourceSpec()` - ResourceSpec struct serialization
 
 ## API
 
@@ -97,6 +158,28 @@ Write-only encrypted stream.
 
 - `writePacket(packet: PacketTrait): Promise<void>` - Encrypt and write a packet
 
+## Bincode Format Details
+
+### Enum Serialization
+
+Enums are serialized with Varint-encoded variant indices:
+- Values < 251: Single byte (u8)
+- Values >= 251: 0xFB marker + 4 bytes (little-endian u32)
+
+This matches bincode 1.3's default VarintEncoding configuration.
+
+### DateTime Serialization
+
+`Date` objects are serialized as `chrono::DateTime<Utc>`:
+- `secs`: i64 (seconds since Unix epoch)
+- `nsecs`: u32 (nanoseconds within that second, 0-999,999,999)
+
+### Option Types
+
+Rust's `Option<T>` is serialized as:
+- `None`: u8 `0`
+- `Some(value)`: u8 `1` + serialized value
+
 ## Security
 
 - Uses X25519 for key exchange (ECDH over Curve25519)
@@ -105,6 +188,15 @@ Write-only encrypted stream.
 - Constant-time MAC comparison to prevent timing attacks
 
 **Note**: Without a PSK, connections are vulnerable to man-in-the-middle attacks. Always use a PSK in production.
+
+## Compatibility with Rust
+
+This library is designed to work seamlessly with the Rust `clavis` library. When using `clavis::protocol!` in Rust, ensure your TypeScript serialization matches:
+
+1. Use `writeVarintU32()` for enum variant indices (not fixed u32)
+2. Use `writeDateTime()` for `DateTime<Utc>` fields
+3. Serialize struct fields in the same order as Rust
+4. Use `writeOptionString()` for `Option<String>` fields
 
 ## License
 
