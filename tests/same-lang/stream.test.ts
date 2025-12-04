@@ -37,7 +37,7 @@ describe("EncryptedStream", () => {
     server = await createEchoServer(port);
     const client = await createTestClient({ host: "127.0.0.1", port });
 
-    const [reader, writer] = client.stream.split();
+    const { reader, writer } = client.stream.split();
     expect(reader).toBeDefined();
     expect(writer).toBeDefined();
 
@@ -61,7 +61,7 @@ describe("EncryptedStream", () => {
     // Override serialize to return large data
     packet.serialize = () => largeData;
 
-    const writer = client.stream.split()[1];
+    const { writer } = client.stream.split();
     await expect(writer.writePacket(packet)).rejects.toThrow();
 
     client.close();
@@ -71,7 +71,7 @@ describe("EncryptedStream", () => {
     server = await createTestServer({
       port,
       onClient: async (stream) => {
-        const [reader, writer] = stream.split();
+        const { reader, writer } = stream.split();
         let count = 0;
         try {
           while (count < 5) {
@@ -89,7 +89,7 @@ describe("EncryptedStream", () => {
     });
 
     const client = await createTestClient({ host: "127.0.0.1", port });
-    const [reader, writer] = client.stream.split();
+    const { reader, writer } = client.stream.split();
 
     for (let i = 0; i < 5; i++) {
       const ping = TestProtocol.Ping({ message: `test-${i}` });

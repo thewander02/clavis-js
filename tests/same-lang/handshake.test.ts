@@ -111,7 +111,7 @@ describe("Handshake", () => {
     const client = await createTestClient({ host: "127.0.0.1", port });
     
     // Verify handshake completed by checking we can split the stream
-    const [reader, writer] = client.stream.split();
+    const { reader, writer } = client.stream.split();
     expect(reader).toBeDefined();
     expect(writer).toBeDefined();
     

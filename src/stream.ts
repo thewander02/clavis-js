@@ -15,9 +15,51 @@ import { Readable, Writable } from "stream";
  */
 export interface EncryptedStreamOptions {
   /** Maximum packet size in bytes (default: 65536) */
-  maxPacketSize?: number;
-  /** Pre-shared key for authentication (optional) */
-  psk?: Uint8Array;
+  maxPacketSize?: number | undefined;
+  /** 
+   * Pre-shared key for authentication (optional).
+   * Can be provided as:
+   * - Uint8Array: Used directly
+   * - string: Auto-detected as base64 or UTF-8
+   */
+  psk?: string | Uint8Array | undefined;
+}
+
+/** Internal options with normalized PSK */
+interface NormalizedOptions {
+  maxPacketSize: number;
+  psk: Uint8Array | undefined;
+}
+
+/**
+ * Normalize PSK from string or Uint8Array to Uint8Array.
+ * For strings, attempts base64 decode first, then falls back to UTF-8.
+ */
+function normalizePsk(psk: string | Uint8Array | undefined): Uint8Array | undefined {
+  if (!psk) return undefined;
+  if (psk instanceof Uint8Array) return psk;
+  
+  // Try base64 decode first
+  try {
+    const decoded = Buffer.from(psk, 'base64');
+    // Verify it's valid base64 by re-encoding and comparing
+    if (decoded.toString('base64') === psk) {
+      return new Uint8Array(decoded);
+    }
+  } catch {
+    // Not valid base64, fall through
+  }
+  
+  // Fall back to UTF-8 encoding
+  return new Uint8Array(Buffer.from(psk, 'utf-8'));
+}
+
+/**
+ * Result of splitting an encrypted stream
+ */
+export interface SplitResult {
+  reader: EncryptedReader;
+  writer: EncryptedWriter;
 }
 
 const DEFAULT_MAX_PACKET_SIZE = 65536;
@@ -165,37 +207,41 @@ export class EncryptedStream {
   private cipher: XChaCha20Poly1305Cipher;
   private decipher: XChaCha20Poly1305Cipher;
   protected adapter: StreamAdapter;
-  private options: Required<EncryptedStreamOptions>;
+  private options: NormalizedOptions;
 
   protected constructor(
     handshakeResult: HandshakeResult,
-    options: EncryptedStreamOptions
+    options: NormalizedOptions
   ) {
     // Adapter will be set by the new() method
     this.adapter = null as unknown as StreamAdapter; // Temporary, will be set
     this.cipher = new XChaCha20Poly1305Cipher(handshakeResult.encKey);
     this.decipher = new XChaCha20Poly1305Cipher(handshakeResult.decKey);
-    this.options = {
-      maxPacketSize: options.maxPacketSize ?? DEFAULT_MAX_PACKET_SIZE,
-      psk: options.psk,
-    } as Required<EncryptedStreamOptions>;
+    this.options = options;
   }
 
   /**
    * Create a new encrypted stream by performing handshake
+   * 
+   * @param stream - Node.js duplex stream (e.g., TCP socket)
+   * @param options - Configuration options including optional PSK
    */
   static async new(
     stream: Readable & Writable,
     options?: EncryptedStreamOptions
   ): Promise<EncryptedStream> {
-    const opts = options ?? {};
+    // Normalize options
+    const normalizedOpts: NormalizedOptions = {
+      maxPacketSize: options?.maxPacketSize ?? DEFAULT_MAX_PACKET_SIZE,
+      psk: normalizePsk(options?.psk),
+    };
 
     // Create adapter and perform handshake
     const adapter = createStreamAdapter(stream);
-    const handshakeResult = await performHandshake(adapter, opts.psk);
+    const handshakeResult = await performHandshake(adapter, normalizedOpts.psk);
 
     // Create the encrypted stream with the same adapter
-    const encryptedStream = new EncryptedStream(handshakeResult, opts);
+    const encryptedStream = new EncryptedStream(handshakeResult, normalizedOpts);
     encryptedStream.adapter = adapter; // Use the same adapter
 
     return encryptedStream;
@@ -256,29 +302,41 @@ export class EncryptedStream {
   }
 
   /**
-   * Split the stream into separate reader and writer
+   * Split the stream into separate reader and writer.
+   * Returns an object with `reader` and `writer` properties.
+   * 
+   * @example
+   * ```typescript
+   * const { reader, writer } = stream.split();
+   * await writer.writePacket(message);
+   * const response = await reader.readPacket();
+   * ```
    */
-  split(): [EncryptedReader, EncryptedWriter] {
+  split(): SplitResult {
     // For Node.js streams, we can't truly split like Rust's ReadHalf/WriteHalf
     // Instead, we'll create reader/writer that share the same underlying stream
     // but enforce read-only/write-only semantics
-    return [
-      new EncryptedReader(this.adapter, this.decipher, this.options),
-      new EncryptedWriter(this.adapter, this.cipher, this.options),
-    ];
+    return {
+      reader: new EncryptedReader(this.adapter, this.decipher, this.options),
+      writer: new EncryptedWriter(this.adapter, this.cipher, this.options),
+    };
   }
 }
 
 /**
- * Encrypted reader (read-only)
+ * Encrypted reader (read-only half of a split stream)
  */
 export class EncryptedReader {
   constructor(
     private adapter: StreamAdapter,
     private decipher: XChaCha20Poly1305Cipher,
-    private options: Required<EncryptedStreamOptions>
+    private options: NormalizedOptions
   ) {}
 
+  /**
+   * Read and decrypt the next packet from the stream.
+   * Returns the decrypted packet data.
+   */
   async readPacket<P extends PacketTrait>(): Promise<P> {
     const length = await this.adapter.readU32LE();
     
@@ -297,15 +355,19 @@ export class EncryptedReader {
 }
 
 /**
- * Encrypted writer (write-only)
+ * Encrypted writer (write-only half of a split stream)
  */
 export class EncryptedWriter {
   constructor(
     private adapter: StreamAdapter,
     private cipher: XChaCha20Poly1305Cipher,
-    private options: Required<EncryptedStreamOptions>
+    private options: NormalizedOptions
   ) {}
 
+  /**
+   * Encrypt and write a packet to the stream.
+   * @param packet - Object implementing PacketTrait with a serialize() method
+   */
   async writePacket(packet: PacketTrait): Promise<void> {
     const plaintext = packet.serialize();
 

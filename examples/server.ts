@@ -14,7 +14,7 @@ async function handleClient(stream: Socket) {
     });
 
     // Split into reader and writer for bidirectional communication
-    const [reader, writer] = encryptedStream.split();
+    const { reader, writer } = encryptedStream.split();
 
     console.log("Client encrypted stream established");
     console.log("Reader:", reader);

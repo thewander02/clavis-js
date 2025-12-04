@@ -3,34 +3,7 @@
  * These helpers make it easy to serialize data structures that match Rust's serde format
  */
 
-import { writeVarintU32, writeString, writeOptionString, writeStringPairVec, writeOptionU32, writeDateTime } from "./bincode.js";
-
-// Internal helpers (not exported from bincode.ts)
-function writeU8(buffer: number[], n: number): void {
-  buffer.push(n & 0xff);
-}
-
-function writeU32(buffer: number[], n: number): void {
-  buffer.push(n & 0xff);
-  buffer.push((n >> 8) & 0xff);
-  buffer.push((n >> 16) & 0xff);
-  buffer.push((n >> 24) & 0xff);
-}
-
-function writeU64(buffer: number[], n: bigint): void {
-  const low = Number(n & 0xffffffffn);
-  const high = Number((n >> 32n) & 0xffffffffn);
-  writeU32(buffer, low);
-  writeU32(buffer, high);
-}
-
-function writeI64(buffer: number[], n: bigint): void {
-  const value = n < 0n ? (0x10000000000000000n + n) : n;
-  const low = Number(value & 0xffffffffn);
-  const high = Number((value >> 32n) & 0xffffffffn);
-  writeU32(buffer, low);
-  writeU32(buffer, high);
-}
+import { writeVarintU32, writeString, writeOptionU32, writeDateTime, writeU8, writeU32, writeU64 } from "./bincode.js";
 
 /**
  * Serialize a MessageHeader structure

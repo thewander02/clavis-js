@@ -39,7 +39,7 @@ describe("JS Client -> Rust Server", () => {
 
     expect(client.stream).toBeDefined();
 
-    const [reader, writer] = client.stream.split();
+    const { reader, writer } = client.stream.split();
 
     // Send a packet
     const ping = TestProtocol.Ping({ message: "hello from js" });
@@ -71,7 +71,7 @@ describe("JS Client -> Rust Server", () => {
       psk,
     });
 
-    const [reader, writer] = client.stream.split();
+    const { reader, writer } = client.stream.split();
 
     const ping = TestProtocol.Ping({ message: "test" });
     await writer.writePacket(ping);
@@ -96,7 +96,7 @@ describe("JS Client -> Rust Server", () => {
       port,
     });
 
-    const [reader, writer] = client.stream.split();
+    const { reader, writer } = client.stream.split();
 
     // Send multiple packets
     for (let i = 0; i < 5; i++) {

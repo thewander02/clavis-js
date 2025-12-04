@@ -72,30 +72,144 @@ export class MessageError extends Error {
 }
 
 /**
+ * Error codes for stream operations.
+ * These provide programmatic identification of error types.
+ */
+export enum StreamErrorCode {
+  /** Connection was closed normally or unexpectedly */
+  ConnectionClosed = "CONNECTION_CLOSED",
+  /** Connection was reset by peer (ECONNRESET) */
+  ConnectionReset = "ECONNRESET",
+  /** Connection refused by server (ECONNREFUSED) */
+  ConnectionRefused = "ECONNREFUSED",
+  /** Operation timed out */
+  Timeout = "TIMEOUT",
+  /** End of stream reached */
+  EOF = "EOF",
+  /** Decryption failed (authentication tag mismatch) */
+  DecryptionFailed = "DECRYPTION_FAILED",
+  /** Handshake failed */
+  HandshakeFailed = "HANDSHAKE_FAILED",
+  /** Invalid operation on stream */
+  InvalidOperation = "INVALID_OPERATION",
+  /** Generic IO error */
+  IOError = "IO_ERROR",
+}
+
+/**
  * Represents stream operation errors
  */
 export class StreamError extends Error {
   public override name = "StreamError";
   public override cause: Error | undefined;
-  constructor(message: string, cause?: Error) {
+  /** Error code for programmatic error handling */
+  public code: StreamErrorCode | undefined;
+  
+  constructor(message: string, cause?: Error, code?: StreamErrorCode) {
     super(message);
     this.cause = cause;
+    this.code = code;
   }
 
   static invalidOperation(message: string): StreamError {
-    return new StreamError(`Invalid stream operation: ${message}`);
+    return new StreamError(
+      `Invalid stream operation: ${message}`,
+      undefined,
+      StreamErrorCode.InvalidOperation
+    );
   }
 
   static unexpectedClose(): StreamError {
-    return new StreamError("Stream closed unexpectedly");
+    return new StreamError(
+      "Stream closed unexpectedly",
+      undefined,
+      StreamErrorCode.ConnectionClosed
+    );
+  }
+
+  static connectionClosed(message?: string): StreamError {
+    return new StreamError(
+      message ?? "Connection closed",
+      undefined,
+      StreamErrorCode.ConnectionClosed
+    );
+  }
+
+  static connectionReset(cause?: Error): StreamError {
+    return new StreamError(
+      "Connection reset by peer",
+      cause,
+      StreamErrorCode.ConnectionReset
+    );
+  }
+
+  static connectionRefused(cause?: Error): StreamError {
+    return new StreamError(
+      "Connection refused",
+      cause,
+      StreamErrorCode.ConnectionRefused
+    );
   }
 
   static timeout(timeoutMs: number): StreamError {
-    return new StreamError(`Stream timeout after ${timeoutMs}ms`);
+    return new StreamError(
+      `Stream timeout after ${timeoutMs}ms`,
+      undefined,
+      StreamErrorCode.Timeout
+    );
+  }
+
+  static eof(): StreamError {
+    return new StreamError(
+      "End of stream",
+      undefined,
+      StreamErrorCode.EOF
+    );
+  }
+
+  static decryptionFailed(message?: string): StreamError {
+    return new StreamError(
+      message ?? "Decryption failed",
+      undefined,
+      StreamErrorCode.DecryptionFailed
+    );
+  }
+
+  static handshakeFailed(message: string, cause?: Error): StreamError {
+    return new StreamError(
+      `Handshake failed: ${message}`,
+      cause,
+      StreamErrorCode.HandshakeFailed
+    );
   }
 
   static io(error: Error): StreamError {
-    return new StreamError(`IO error: ${error.message}`, error);
+    // Try to detect specific error codes from the underlying error
+    const ioError = error as { code?: string };
+    let code = StreamErrorCode.IOError;
+    
+    if (ioError.code === "ECONNRESET") {
+      code = StreamErrorCode.ConnectionReset;
+    } else if (ioError.code === "ECONNREFUSED") {
+      code = StreamErrorCode.ConnectionRefused;
+    } else if (ioError.code === "ETIMEDOUT") {
+      code = StreamErrorCode.Timeout;
+    }
+    
+    return new StreamError(`IO error: ${error.message}`, error, code);
+  }
+
+  /** Check if this error indicates a closed connection */
+  isConnectionClosed(): boolean {
+    return this.code === StreamErrorCode.ConnectionClosed ||
+           this.code === StreamErrorCode.ConnectionReset ||
+           this.code === StreamErrorCode.EOF;
+  }
+
+  /** Check if this error might be transient and worth retrying */
+  isTransient(): boolean {
+    return this.code === StreamErrorCode.Timeout ||
+           this.code === StreamErrorCode.ConnectionReset;
   }
 }
 

@@ -42,7 +42,7 @@ describe("Bidirectional Cross-Language Tests", () => {
     jsServer = await createTestServer({
       port: port1,
       onClient: async (stream) => {
-        const [reader, writer] = stream.split();
+        const { reader, writer } = stream.split();
         
         try {
           // Read packets (can't deserialize yet)
@@ -71,7 +71,7 @@ describe("Bidirectional Cross-Language Tests", () => {
       host: "127.0.0.1",
       port: port2,
     });
-    const [reader1, writer1] = jsClient1.stream.split();
+    const { reader: reader1, writer: writer1 } = jsClient1.stream.split();
 
     const ping = TestProtocol.Ping({ message: "js-to-rust" });
     await writer1.writePacket(ping);
@@ -98,7 +98,7 @@ describe("Bidirectional Cross-Language Tests", () => {
       port: port1,
       psk,
       onClient: async (stream) => {
-        const [reader, writer] = stream.split();
+        const { reader, writer } = stream.split();
         try {
           // Read packet and send echo response
           await reader.readPacket<TestProtocol>();
@@ -126,7 +126,7 @@ describe("Bidirectional Cross-Language Tests", () => {
       port: port2,
       psk,
     });
-    const [reader, writer] = jsClient.stream.split();
+    const { reader, writer } = jsClient.stream.split();
 
     await writer.writePacket(TestProtocol.Ping({ message: "test" }));
     const response = await reader.readPacket<TestProtocol>();

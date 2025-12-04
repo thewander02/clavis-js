@@ -63,7 +63,7 @@ export async function createEchoServer(
     onClient: async (stream) => {
       // Just accept the connection - full echo requires deserialization
       // which isn't fully implemented yet
-      const [reader] = stream.split();
+      const { reader } = stream.split();
       try {
         // Read packets but don't echo back (can't deserialize yet)
         while (true) {

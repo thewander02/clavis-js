@@ -31,7 +31,7 @@ describe("Rust Client -> JS Server", () => {
     server = await createTestServer({
       port,
       onClient: async (stream) => {
-        const [reader, writer] = stream.split();
+        const { reader, writer } = stream.split();
         
         try {
           // Read Join packet
@@ -66,7 +66,7 @@ describe("Rust Client -> JS Server", () => {
       port,
       psk,
       onClient: async (stream) => {
-        const [reader, writer] = stream.split();
+        const { reader, writer } = stream.split();
         
         try {
           await reader.readPacket<TestProtocol>();
@@ -93,7 +93,7 @@ describe("Rust Client -> JS Server", () => {
     server = await createTestServer({
       port,
       onClient: async (stream) => {
-        const [reader, writer] = stream.split();
+        const { reader, writer } = stream.split();
         
         try {
           await reader.readPacket<TestProtocol>();

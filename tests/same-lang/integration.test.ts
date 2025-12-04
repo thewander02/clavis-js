@@ -30,7 +30,7 @@ describe("Integration Tests", () => {
     server = await createTestServer({
       port,
       onClient: async (stream) => {
-        const [reader, writer] = stream.split();
+        const { reader, writer } = stream.split();
         
         try {
           // Read packets (can't deserialize yet, but we can count them)
@@ -52,7 +52,7 @@ describe("Integration Tests", () => {
     });
 
     const client = await createTestClient({ host: "127.0.0.1", port });
-    const [reader, writer] = client.stream.split();
+    const { reader, writer } = client.stream.split();
 
     // Send Join
     await writer.writePacket(TestProtocol.Join("alice"));
@@ -82,7 +82,7 @@ describe("Integration Tests", () => {
     server = await createTestServer({
       port,
       onClient: async (stream) => {
-        const [reader, writer] = stream.split();
+        const { reader, writer } = stream.split();
         try {
           // Read packet and send Pong response
           await reader.readPacket();
@@ -103,7 +103,7 @@ describe("Integration Tests", () => {
     // Test each client
     for (let i = 0; i < clients.length; i++) {
       const client = clients[i];
-      const [reader, writer] = client.stream.split();
+      const { reader, writer } = client.stream.split();
       
       const ping = TestProtocol.Ping({ message: `client-${i}` });
       await writer.writePacket(ping);
@@ -121,7 +121,7 @@ describe("Integration Tests", () => {
       port,
       maxPacketSize: 100000,
       onClient: async (stream) => {
-        const [reader, writer] = stream.split();
+        const { reader, writer } = stream.split();
         try {
           // Read packet and send echo response
           await reader.readPacket();
@@ -142,7 +142,7 @@ describe("Integration Tests", () => {
       port,
       maxPacketSize: 100000,
     });
-    const [reader, writer] = client.stream.split();
+    const { reader, writer } = client.stream.split();
 
     // Create a message with large content
     const largeContent = "x".repeat(50000);
@@ -166,7 +166,7 @@ describe("Integration Tests", () => {
     server = await createTestServer({
       port,
       onClient: async (stream) => {
-        const [reader, writer] = stream.split();
+        const { reader, writer } = stream.split();
         let pingCount = 0;
         try {
           while (pingCount < 10) {
@@ -184,7 +184,7 @@ describe("Integration Tests", () => {
     });
 
     const client = await createTestClient({ host: "127.0.0.1", port });
-    const [reader, writer] = client.stream.split();
+    const { reader, writer } = client.stream.split();
 
     // Send multiple pings
     for (let i = 0; i < 10; i++) {

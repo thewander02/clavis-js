@@ -22,7 +22,7 @@ async function main() {
   });
 
   // Split into reader and writer for bidirectional communication
-  const [reader, writer] = encryptedStream.split();
+  const { reader, writer } = encryptedStream.split();
 
   // Example: Send and receive packets
   // Note: Actual packet sending requires implementing your protocol

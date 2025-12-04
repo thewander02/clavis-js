@@ -28,10 +28,22 @@
  * // Deserialize (requires protocol definition)
  * const deserialized = Packet.deserialize(serialized);
  * ```
+ * 
+ * For simpler use cases, see `createProtocolCodec()` which provides
+ * a lightweight codec for encoding/decoding variant indices.
  */
 
 import { ClavisError } from "./error.js";
-import { writeVarintU32, writeString, writeU32, writeU64, writeI64, writeDateTime } from "./bincode.js";
+import { 
+  writeVarintU32, 
+  writeString, 
+  writeU32, 
+  writeU64, 
+  writeDateTime,
+  readVarintU32,
+  readU32,
+  BincodeReader,
+} from "./bincode.js";
 
 /**
  * Packet trait interface - types that can be serialized/deserialized
@@ -136,7 +148,7 @@ export function protocol(def: Record<string, unknown[]>): unknown {
       return buffer;
     }
 
-    deserialize(data: Uint8Array): this {
+    deserialize(_data: Uint8Array): this {
       // Deserialization will be handled by protocol helper
       throw ClavisError.deserializationFailed("Deserialization not yet fully implemented");
     }
@@ -155,4 +167,221 @@ export function protocol(def: Record<string, unknown[]>): unknown {
   };
 
   return ProtocolEnum;
+}
+
+// ============================================================================
+// PROTOCOL CODEC (Lightweight variant index encoder/decoder)
+// ============================================================================
+
+/**
+ * Decoded message with variant type and raw data
+ */
+export interface DecodedMessage<T extends string> {
+  /** The variant type name */
+  type: T;
+  /** The variant index */
+  index: number;
+  /** Raw data after the variant index (for custom deserialization) */
+  data: Uint8Array;
+  /** BincodeReader positioned after the variant index */
+  reader: BincodeReader;
+}
+
+/**
+ * Protocol codec for encoding/decoding variant indices.
+ * This is a lightweight alternative to the full `protocol()` DSL
+ * when you need more control over serialization/deserialization.
+ * 
+ * @example
+ * ```typescript
+ * // Define your message types
+ * type MessageType = 
+ *   | 'AgentHello'
+ *   | 'ControllerAck'
+ *   | 'Heartbeat';
+ * 
+ * // Create codec with variants in order (must match Rust enum order)
+ * const codec = createProtocolCodec<MessageType>([
+ *   'AgentHello',
+ *   'ControllerAck', 
+ *   'Heartbeat',
+ * ]);
+ * 
+ * // Encode a message
+ * const bytes = codec.encode('ControllerAck', myData);
+ * 
+ * // Decode a message
+ * const { type, reader } = codec.decode(bytes);
+ * if (type === 'ControllerAck') {
+ *   const sessionId = reader.readString();
+ * }
+ * ```
+ */
+export interface ProtocolCodec<T extends string> {
+  /** Get the variant index for a type name */
+  variantIndex(type: T): number;
+  
+  /** Get the type name for a variant index */
+  variantName(index: number): T | undefined;
+  
+  /** Get all variant names in order */
+  variants(): readonly T[];
+  
+  /**
+   * Encode a message with variant index prefix.
+   * Uses u32 little-endian for variant index (matching clavis::protocol! macro).
+   * 
+   * @param type - The variant type name
+   * @param data - Optional serialized data to append after the variant index
+   */
+  encode(type: T, data?: Uint8Array): Uint8Array;
+  
+  /**
+   * Decode a message, extracting the variant type and remaining data.
+   * Reads u32 little-endian variant index.
+   * 
+   * @param data - Raw message bytes
+   * @returns Decoded message with type, index, remaining data, and a BincodeReader
+   */
+  decode(data: Uint8Array): DecodedMessage<T>;
+  
+  /**
+   * Check if a variant index is valid
+   */
+  isValidIndex(index: number): boolean;
+  
+  /**
+   * Check if a type name is valid
+   */
+  isValidType(type: string): type is T;
+}
+
+/**
+ * Create a protocol codec for encoding/decoding variant indices.
+ * 
+ * @param variants - Array of variant names in order (must match Rust enum definition order)
+ * @param options - Codec options
+ * @returns ProtocolCodec instance
+ * 
+ * @example
+ * ```typescript
+ * const MessageCodec = createProtocolCodec([
+ *   'AgentHello',
+ *   'ControllerAck',
+ *   'Heartbeat',
+ *   'TaskOffer',
+ *   // ... more variants
+ * ] as const);
+ * 
+ * // Encode
+ * const buffer: number[] = [];
+ * writeU32(buffer, MessageCodec.variantIndex('ControllerAck'));
+ * // ... serialize variant data
+ * 
+ * // Decode
+ * const { type, reader } = MessageCodec.decode(data);
+ * switch (type) {
+ *   case 'ControllerAck':
+ *     const sessionId = reader.readString();
+ *     break;
+ * }
+ * ```
+ */
+export function createProtocolCodec<T extends string>(
+  variants: readonly T[],
+  options?: {
+    /** Use Varint encoding instead of u32 (default: false for clavis::protocol! compatibility) */
+    useVarint?: boolean;
+  }
+): ProtocolCodec<T> {
+  const useVarint = options?.useVarint ?? false;
+  const nameToIndex = new Map<T, number>();
+  const indexToName = new Map<number, T>();
+  
+  for (let i = 0; i < variants.length; i++) {
+    const name = variants[i]!;
+    nameToIndex.set(name, i);
+    indexToName.set(i, name);
+  }
+  
+  return {
+    variantIndex(type: T): number {
+      const index = nameToIndex.get(type);
+      if (index === undefined) {
+        throw ClavisError.serializationFailed(`Unknown variant type: ${type}`);
+      }
+      return index;
+    },
+    
+    variantName(index: number): T | undefined {
+      return indexToName.get(index);
+    },
+    
+    variants(): readonly T[] {
+      return variants;
+    },
+    
+    encode(type: T, data?: Uint8Array): Uint8Array {
+      const index = nameToIndex.get(type);
+      if (index === undefined) {
+        throw ClavisError.serializationFailed(`Unknown variant type: ${type}`);
+      }
+      
+      const buffer: number[] = [];
+      if (useVarint) {
+        writeVarintU32(buffer, index);
+      } else {
+        // clavis::protocol! macro uses u32 for variant indices
+        writeU32(buffer, index);
+      }
+      
+      if (data) {
+        buffer.push(...data);
+      }
+      
+      return new Uint8Array(buffer);
+    },
+    
+    decode(data: Uint8Array): DecodedMessage<T> {
+      if (data.length < 4) {
+        throw ClavisError.deserializationFailed("Data too short to contain variant index");
+      }
+      
+      let index: number;
+      let bytesRead: number;
+      
+      if (useVarint) {
+        const result = readVarintU32(data, 0);
+        index = result.value;
+        bytesRead = result.bytesRead;
+      } else {
+        const result = readU32(data, 0);
+        index = result.value;
+        bytesRead = result.bytesRead;
+      }
+      
+      const type = indexToName.get(index);
+      if (type === undefined) {
+        throw ClavisError.deserializationFailed(`Unknown variant index: ${index}`);
+      }
+      
+      const remainingData = data.slice(bytesRead);
+      const reader = new BincodeReader(remainingData);
+      
+      return {
+        type,
+        index,
+        data: remainingData,
+        reader,
+      };
+    },
+    
+    isValidIndex(index: number): boolean {
+      return indexToName.has(index);
+    },
+    
+    isValidType(type: string): type is T {
+      return nameToIndex.has(type as T);
+    },
+  };
 }
